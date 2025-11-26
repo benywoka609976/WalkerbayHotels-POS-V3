@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Walkerbay POS V3</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Cormorant+Garamond:wght@600;700&family=Space+Mono&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        deepBlue: '#002B5B',
+                        softWhite: '#F3F4F6',
+                        accentGold: '#C5A059',
+                        danger: '#ef4444',
+                        success: '#22c55e'
+                    },
+                    fontFamily: {
+                        sans: ['Montserrat', 'sans-serif'],
+                        serif: ['Cormorant Garamond', 'serif'],
+                        mono: ['Space Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { -webkit-tap-highlight-color: transparent; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Modal Transitions */
+        .modal { transition: opacity 0.25s ease; }
+        .modal-content { transition: transform 0.25s ease; }
+        .modal.hidden { opacity: 0; pointer-events: none; }
+        .modal.hidden .modal-content { transform: scale(0.95); }
+
+        /* --- PRINT STYLES (CRITICAL) --- */
+        @media print {
+            body * { visibility: hidden; }
+            #printable-area, #printable-area * { visibility: visible; }
+            #printable-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                background: white;
+                color: black;
+            }
+            /* Hide everything else */
+            header, nav, main, #mobile-cart-bar, .modal { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 h-screen flex flex-col overflow-hidden font-sans select-none">
+
+    <!-- HEADER -->
+    <header class="bg-deepBlue text-white h-14 flex items-center justify-between px-4 shadow-md shrink-0 z-30">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 bg-accentGold rounded-full flex items-center justify-center text-deepBlue font-bold font-serif">W</div>
+            <div>
+                <h1 class="font-serif text-lg leading-none">Walkerbay</h1>
+            </div>
+        </div>
+        <div id="clock" class="text-xs font-mono bg-white/10 px-2 py-1 rounded">00:00</div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 overflow-hidden relative">
+        
+        <!-- VIEW 1: SALES REGISTER -->
+        <div id="view-register" class="h-full flex flex-col fade-in">
+            <!-- Category Filter -->
+            <div class="bg-white p-2 overflow-x-auto no-scrollbar flex gap-2 shrink-0 border-b border-gray-100">
+                <button onclick="filterProducts('all')" class="cat-btn active bg-deepBlue text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase whitespace-nowrap transition">All</button>
+                <button onclick="filterProducts('accommodation')" class="cat-btn bg-gray-100 text-gray-600 px-4 py-1.5 rounded-full text-xs font-bold uppercase whitespace-nowrap transition">Rooms</button>
+                <button onclick="filterProducts('food')" class="cat-btn bg-gray-100 text-gray-600 px-4 py-1.5 rounded-full text-xs font-bold uppercase whitespace-nowrap transition">Dining</button>
+                <button onclick="filterProducts('excursion')" class="cat-btn bg-gray-100 text-gray-600 px-4 py-1.5 rounded-full text-xs font-bold uppercase whitespace-nowrap transition">Tours</button>
+            </div>
+
+            <!-- Product Grid -->
+            <div id="product-grid" class="flex-1 overflow-y-auto p-3 grid grid-cols-2 md:grid-cols-4 gap-3 pb-24">
+                <!-- Products injected via JS -->
+            </div>
+        </div>
+
+        <!-- VIEW 2: INVENTORY & REPORTS -->
+        <div id="view-inventory" class="h-full hidden fade-in bg-gray-50 flex-col overflow-hidden">
+            <!-- Dashboard Stats -->
+            <div class="bg-deepBlue text-white p-4 shadow-lg shrink-0">
+                <h2 class="font-serif text-xl mb-3 text-accentGold">Management Dashboard</h2>
+                <div class="grid grid-cols-3 gap-3 text-center">
+                    <div class="bg-white/10 rounded p-2">
+                        <div class="text-[10px] uppercase opacity-70">Total Sales</div>
+                        <div class="font-bold text-lg" id="dash-sales">0</div>
+                    </div>
+                    <div class="bg-white/10 rounded p-2">
+                        <div class="text-[10px] uppercase opacity-70">Revenue</div>
+                        <div class="font-bold text-lg" id="dash-revenue">0</div>
+                    </div>
+                    <div class="bg-white/10 rounded p-2">
+                        <div class="text-[10px] uppercase opacity-70">Low Stock</div>
+                        <div class="font-bold text-lg text-red-300" id="dash-low">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inventory List -->
+            <div class="flex justify-between items-center p-4 border-b border-gray-200 bg-white">
+                <h3 class="font-bold text-deepBlue text-sm uppercase tracking-wide">Stock Management</h3>
+                <button onclick="openProductModal()" class="bg-accentGold text-white px-3 py-1.5 rounded text-xs font-bold uppercase shadow"><i class="fas fa-plus mr-1"></i> Add Item</button>
+            </div>
+
+            <div id="inventory-list" class="flex-1 overflow-y-auto p-4 space-y-3 pb-24">
+                <!-- Inventory Items Injected JS -->
+            </div>
+        </div>
+
+        <!-- VIEW 3: HISTORY -->
+        <div id="view-history" class="h-full hidden fade-in bg-white flex-col">
+            <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h2 class="font-serif text-xl text-deepBlue">Transactions</h2>
+                <button onclick="clearData()" class="text-danger text-xs uppercase font-bold border border-red-200 px-2 py-1 rounded hover:bg-red-50">Reset All</button>
+            </div>
+            <div id="history-list" class="flex-1 overflow-y-auto p-4 space-y-3 pb-24">
+                <!-- Transactions injected via JS -->
+            </div>
+        </div>
+
+    </main>
+
+    <!-- FLOATING CART BAR -->
+    <div id="mobile-cart-bar" onclick="openCartModal()" class="fixed bottom-20 left-4 right-4 bg-deepBlue text-white p-4 rounded-xl shadow-2xl flex justify-between items-center transform translate-y-32 transition-transform duration-300 z-40 cursor-pointer">
+        <div class="flex items-center gap-3">
+            <div class="bg-accentGold text-deepBlue w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm" id="cart-count-float">0</div>
+            <span class="text-sm font-medium">View Current Order</span>
+        </div>
+        <div class="font-bold text-lg" id="cart-total-float">KSh 0</div>
+    </div>
+
+    <!-- BOTTOM NAVIGATION -->
+    <nav class="bg-white border-t border-gray-200 h-16 flex justify-around items-center shrink-0 z-50 pb-safe shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
+        <button onclick="switchView('register')" class="nav-btn text-deepBlue flex flex-col items-center gap-1 w-full h-full justify-center active:bg-gray-50">
+            <i class="fas fa-cash-register text-lg"></i>
+            <span class="text-[10px] font-bold uppercase">Sale</span>
+        </button>
+        <button onclick="switchView('inventory')" class="nav-btn text-gray-400 flex flex-col items-center gap-1 w-full h-full justify-center active:bg-gray-50">
+            <i class="fas fa-boxes text-lg"></i>
+            <span class="text-[10px] font-bold uppercase">Inventory</span>
+        </button>
+        <button onclick="switchView('history')" class="nav-btn text-gray-400 flex flex-col items-center gap-1 w-full h-full justify-center active:bg-gray-50">
+            <i class="fas fa-history text-lg"></i>
+            <span class="text-[10px] font-bold uppercase">History</span>
+        </button>
+    </nav>
+
+    <!-- CART MODAL -->
+    <div id="cart-modal" class="modal hidden fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-[60] flex justify-end">
+        <div class="modal-content bg-white w-full md:w-[400px] h-full shadow-2xl flex flex-col">
+            <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 class="font-serif text-xl text-deepBlue">Current Order</h3>
+                <button onclick="closeCartModal()" class="w-8 h-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="cart-items-container" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
+            <div class="p-6 bg-white border-t border-gray-100">
+                <div class="flex justify-between mb-4 text-xl font-bold text-deepBlue"><span>Total</span><span id="cart-modal-total">KSh 0</span></div>
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <button onclick="setPayment('CASH')" id="btn-cash" class="pay-method active py-3 border-2 border-deepBlue bg-deepBlue text-white rounded-lg text-xs font-bold uppercase">Cash</button>
+                    <button onclick="setPayment('MPESA')" id="btn-mpesa" class="pay-method py-3 border-2 border-gray-200 text-gray-500 rounded-lg text-xs font-bold uppercase">M-Pesa</button>
+                </div>
+                <button onclick="processSale()" class="w-full bg-accentGold text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm shadow-lg">Complete Sale</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PRODUCT EDIT/ADD MODAL -->
+    <div id="product-modal" class="modal hidden fixed inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4">
+        <div class="modal-content bg-white w-full max-w-sm rounded-lg shadow-xl overflow-hidden">
+            <div class="bg-deepBlue p-4 text-white flex justify-between items-center">
+                <h3 class="font-bold" id="modal-title">Add New Item</h3>
+                <button onclick="closeProductModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <input type="hidden" id="edit-id">
+                <div>
+                    <label class="text-xs font-bold uppercase text-gray-500">Item Name</label>
+                    <input type="text" id="edit-name" class="w-full border border-gray-300 rounded p-2 focus:border-accentGold outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs font-bold uppercase text-gray-500">Price (KSh)</label>
+                        <input type="number" id="edit-price" class="w-full border border-gray-300 rounded p-2 focus:border-accentGold outline-none">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold uppercase text-gray-500">Stock Qty</label>
+                        <input type="number" id="edit-stock" class="w-full border border-gray-300 rounded p-2 focus:border-accentGold outline-none">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold uppercase text-gray-500">Category</label>
+                    <select id="edit-category" class="w-full border border-gray-300 rounded p-2 bg-white">
+                        <option value="accommodation">Accommodation</option>
+                        <option value="food">Dining</option>
+                        <option value="excursion">Excursions</option>
+                    </select>
+                </div>
+                <button onclick="saveProduct()" class="w-full bg-deepBlue text-white py-3 rounded font-bold uppercase mt-2">Save Item</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PROCESSING OVERLAY -->
+    <div id="processing-overlay" class="fixed inset-0 bg-deepBlue/90 z-[80] hidden flex flex-col items-center justify-center text-white">
+        <div class="w-12 h-12 border-4 border-white/30 border-t-accentGold rounded-full animate-spin mb-4"></div>
+        <h3 class="text-lg font-serif">Processing...</h3>
+    </div>
+
+    <!-- HIDDEN PRINTABLE AREA (For PDF/Printer) -->
+    <div id="printable-area" class="hidden font-mono text-sm bg-white p-4">
+        <div class="text-center mb-4">
+            <h2 class="font-bold text-xl uppercase font-serif">Walkerbay Hotels</h2>
+            <p>Muhuru Bay, Lake Victoria</p>
+            <p>+254 700 346 672</p>
+        </div>
+        <div class="border-b-2 border-dashed border-black mb-2"></div>
+        <div class="flex justify-between mb-1">
+            <span>Date: <span id="print-date"></span></span>
+        </div>
+        <div class="flex justify-between mb-2">
+            <span>Ref: <span id="print-id"></span></span>
+        </div>
+        <div class="border-b-2 border-dashed border-black mb-2"></div>
+        <table class="w-full text-left mb-2">
+            <thead>
+                <tr><th class="pb-1">Item</th><th class="pb-1 text-center">Qty</th><th class="pb-1 text-right">Amt</th></tr>
+            </thead>
+            <tbody id="print-items"></tbody>
+        </table>
+        <div class="border-t-2 border-dashed border-black pt-2 mb-4">
+            <div class="flex justify-between font-bold text-lg">
+                <span>TOTAL</span>
+                <span id="print-total"></span>
+            </div>
+            <div class="flex justify-between text-xs mt-1">
+                <span>Method:</span>
+                <span id="print-method"></span>
+            </div>
+        </div>
+        <div class="text-center mt-6 text-xs">
+            <p>Thank you for your visit!</p>
+            <p>CEO: Victor Olal</p>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- DEFAULT DATA SEED ---
+        const defaultInventory = [
+            { id: 1, name: "Standard Room", category: "accommodation", price: 1500, stock: 10, icon: "fa-bed" },
+            { id: 2, name: "Suite Room", category: "accommodation", price: 2000, stock: 5, icon: "fa-gem" },
+            { id: 3, name: "Bed Only Package", category: "accommodation", price: 6000, stock: 999, icon: "fa-box" },
+            { id: 4, name: "Light Lunch", category: "food", price: 300, stock: 50, icon: "fa-sandwich" },
+            { id: 5, name: "Breakfast Buffet", category: "food", price: 500, stock: 50, icon: "fa-coffee" },
+            { id: 6, name: "Dinner Buffet", category: "food", price: 800, stock: 50, icon: "fa-utensils" },
+            { id: 7, name: "Soda (300ml)", category: "food", price: 100, stock: 100, icon: "fa-bottle-water" },
+            { id: 8, name: "Speedboat Ride", category: "excursion", price: 1500, stock: 999, icon: "fa-ship" },
+            { id: 9, name: "Caves Tour", category: "excursion", price: 500, stock: 999, icon: "fa-mountain" },
+        ];
+
+        // --- STATE ---
+        let inventory = JSON.parse(localStorage.getItem('wb_inventory')) || defaultInventory;
+        let transactions = JSON.parse(localStorage.getItem('wb_transactions')) || [];
+        let cart = [];
+        let paymentType = 'CASH';
+
+        // --- INIT ---
+        window.onload = () => {
+            if(!localStorage.getItem('wb_inventory')) saveInventory();
+            updateUI();
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('clock').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            }, 1000);
+        };
+
+        function saveInventory() { localStorage.setItem('wb_inventory', JSON.stringify(inventory)); }
+        function saveTransactions() { localStorage.setItem('wb_transactions', JSON.stringify(transactions)); }
+        function updateUI() {
+            renderProducts('all');
+            renderInventoryList();
+            renderHistory();
+            updateDashboard();
+        }
+
+        function switchView(viewName) {
+            ['register', 'inventory', 'history'].forEach(v => document.getElementById(`view-${v}`).classList.add('hidden'));
+            document.getElementById(`view-${viewName}`).classList.remove('hidden');
+            if(viewName !== 'register') document.getElementById(`view-${viewName}`).classList.add('flex');
+            
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.replace('text-deepBlue', 'text-gray-400'));
+            event.currentTarget.classList.replace('text-gray-400', 'text-deepBlue');
+        }
+
+        // --- SALES & CART ---
+        function filterProducts(cat) {
+            document.querySelectorAll('.cat-btn').forEach(b => {
+                b.classList.remove('bg-deepBlue', 'text-white');
+                b.classList.add('bg-gray-100', 'text-gray-600');
+            });
+            event.target.classList.remove('bg-gray-100', 'text-gray-600');
+            event.target.classList.add('bg-deepBlue', 'text-white');
+            renderProducts(cat);
+        }
+
+        function renderProducts(cat) {
+            const grid = document.getElementById('product-grid');
+            grid.innerHTML = '';
+            const items = cat === 'all' ? inventory : inventory.filter(p => p.category === cat);
+            
+            items.forEach(p => {
+                let stockColor = p.stock < 5 ? 'text-red-500' : 'text-gray-400';
+                let icon = p.category === 'accommodation' ? 'fa-bed' : p.category === 'food' ? 'fa-utensils' : 'fa-map';
+                
+                grid.innerHTML += `
+                    <div onclick="addToCart(${p.id})" class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 active:scale-95 transition cursor-pointer flex flex-col justify-between h-32 relative overflow-hidden group">
+                        <div class="absolute right-0 top-0 p-2 opacity-10"><i class="fas ${icon} text-4xl text-deepBlue"></i></div>
+                        <div>
+                            <div class="font-bold text-sm text-deepBlue leading-tight mb-1">${p.name}</div>
+                            <div class="text-[10px] ${stockColor} font-bold"><i class="fas fa-cube mr-1"></i>${p.stock} left</div>
+                        </div>
+                        <div class="z-10 mt-auto"><span class="bg-deepBlue text-white text-[10px] font-bold px-2 py-1 rounded-full">KSh ${p.price.toLocaleString()}</span></div>
+                    </div>
+                `;
+            });
+        }
+
+        function addToCart(id) {
+            const prod = inventory.find(p => p.id === id);
+            const cartItem = cart.find(c => c.id === id);
+            const currentQty = cartItem ? cartItem.qty : 0;
+            if (currentQty >= prod.stock) { alert("Out of Stock!"); return; }
+
+            if(cartItem) cartItem.qty++;
+            else cart.push({...prod, qty: 1});
+            updateCartBar();
+        }
+
+        function updateCartBar() {
+            const total = cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+            const count = cart.reduce((sum, i) => sum + i.qty, 0);
+            document.getElementById('cart-count-float').innerText = count;
+            document.getElementById('cart-total-float').innerText = `KSh ${total.toLocaleString()}`;
+            const bar = document.getElementById('mobile-cart-bar');
+            if(count > 0) bar.classList.remove('translate-y-32'); else bar.classList.add('translate-y-32');
+        }
+
+        function openCartModal() {
+            const modal = document.getElementById('cart-modal');
+            const container = document.getElementById('cart-items-container');
+            container.innerHTML = '';
+            let total = 0;
+            cart.forEach(item => {
+                total += item.price * item.qty;
+                container.innerHTML += `
+                    <div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
+                        <div>
+                            <div class="font-bold text-deepBlue text-sm">${item.name}</div>
+                            <div class="text-xs text-gray-500">@ ${item.price.toLocaleString()}</div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button onclick="modQty(${item.id}, -1)" class="w-8 h-8 rounded bg-white border border-gray-200 text-gray-600 font-bold">-</button>
+                            <span class="font-bold w-4 text-center text-sm">${item.qty}</span>
+                            <button onclick="modQty(${item.id}, 1)" class="w-8 h-8 rounded bg-deepBlue text-white font-bold">+</button>
+                        </div>
+                    </div>
+                `;
+            });
+            document.getElementById('cart-modal-total').innerText = `KSh ${total.toLocaleString()}`;
+            modal.classList.remove('hidden');
+        }
+
+        function modQty(id, change) {
+            const item = cart.find(i => i.id === id);
+            const prod = inventory.find(p => p.id === id);
+            if (change > 0 && item.qty >= prod.stock) { alert("Max stock reached"); return; }
+            item.qty += change;
+            if(item.qty <= 0) cart = cart.filter(i => i.id !== id);
+            updateCartBar(); openCartModal();
+            if(cart.length === 0) closeCartModal();
+        }
+
+        function closeCartModal() { document.getElementById('cart-modal').classList.add('hidden'); }
+        
+        function setPayment(method) {
+            paymentType = method;
+            document.querySelectorAll('.pay-method').forEach(b => { b.classList.remove('bg-deepBlue', 'text-white', 'border-deepBlue'); b.classList.add('border-gray-200', 'text-gray-500'); });
+            const activeBtn = method === 'CASH' ? document.getElementById('btn-cash') : document.getElementById('btn-mpesa');
+            activeBtn.classList.remove('border-gray-200', 'text-gray-500'); activeBtn.classList.add('bg-deepBlue', 'text-white', 'border-deepBlue');
+        }
+
+        // --- CHECKOUT & WHATSAPP LOGIC ---
+        function processSale() {
+            closeCartModal();
+            document.getElementById('processing-overlay').classList.remove('hidden');
+
+            setTimeout(() => {
+                // 1. Deduct Inventory
+                cart.forEach(cartItem => {
+                    const invItem = inventory.find(i => i.id === cartItem.id);
+                    if(invItem) invItem.stock -= cartItem.qty;
+                });
+                saveInventory();
+
+                // 2. Save Transaction
+                const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
+                const txId = 'WB' + Date.now().toString().slice(-6);
+                const tx = {
+                    id: txId,
+                    date: new Date().toISOString(),
+                    items: [...cart],
+                    total: total,
+                    method: paymentType
+                };
+                transactions.unshift(tx);
+                saveTransactions();
+
+                // 3. WhatsApp Forwarding
+                sendToWhatsApp(tx);
+
+                // 4. Reset & UI Update
+                cart = [];
+                updateCartBar();
+                updateUI();
+                document.getElementById('processing-overlay').classList.add('hidden');
+                
+            }, 1500);
+        }
+
+        function sendToWhatsApp(tx) {
+            // Format Items for Message
+            let itemString = "";
+            tx.items.forEach(i => {
+                itemString += `• ${i.name} (x${i.qty}) - ${i.price * i.qty}%0A`;
+            });
+
+            const message = `*WALKERBAY POS SALE*%0A------------------%0A` +
+                            `Ref: ${tx.id}%0A` +
+                            `Date: ${new Date(tx.date).toLocaleDateString()}%0A` +
+                            `Method: ${tx.method}%0A%0A` +
+                            `*ITEMS:*%0A${itemString}` +
+                            `------------------%0A` +
+                            `*TOTAL: KSh ${tx.total.toLocaleString()}*`;
+            
+            // Open WhatsApp
+            window.open(`https://wa.me/254700346672?text=${message}`, '_blank');
+        }
+
+        // --- PRINTING LOGIC ---
+        function printReceipt(id) {
+            const tx = transactions.find(t => t.id === id);
+            if(!tx) return;
+
+            // Populate Hidden Printable Area
+            document.getElementById('print-id').innerText = tx.id;
+            document.getElementById('print-date').innerText = new Date(tx.date).toLocaleString();
+            document.getElementById('print-method').innerText = tx.method;
+            
+            const tbody = document.getElementById('print-items');
+            tbody.innerHTML = '';
+            tx.items.forEach(i => {
+                tbody.innerHTML += `<tr><td>${i.name}</td><td class="text-center">${i.qty}</td><td class="text-right">${(i.price * i.qty).toLocaleString()}</td></tr>`;
+            });
+            
+            document.getElementById('print-total').innerText = `KSh ${tx.total.toLocaleString()}`;
+
+            // Trigger Browser Print
+            window.print();
+        }
+
+        // --- HISTORY & MANAGEMENT LOGIC ---
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = '';
+            const sorted = [...transactions].sort((a,b) => new Date(b.date) - new Date(a.date));
+            if(sorted.length === 0) list.innerHTML = '<div class="text-center text-gray-400 mt-10">No transactions found.</div>';
+
+            sorted.forEach(tx => {
+                const dateObj = new Date(tx.date);
+                const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                
+                list.innerHTML += `
+                    <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-deepBlue flex justify-between items-center">
+                        <div class="flex-1">
+                            <div class="text-[10px] text-gray-400 font-bold">#${tx.id}</div>
+                            <div class="font-bold text-deepBlue text-sm">${dateStr}</div>
+                            <div class="text-[10px] text-gray-500">${tx.items.length} items • ${tx.method}</div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="font-bold text-accentGold text-sm">KSh ${tx.total.toLocaleString()}</div>
+                            <button onclick="printReceipt('${tx.id}')" class="bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center text-deepBlue hover:bg-deepBlue hover:text-white transition shadow-sm">
+                                <i class="fas fa-print"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // --- INVENTORY MANAGEMENT (Same as previous) ---
+        function renderInventoryList() {
+            const list = document.getElementById('inventory-list');
+            list.innerHTML = '';
+            inventory.forEach(item => {
+                list.innerHTML += `
+                    <div class="bg-white p-3 rounded shadow-sm border border-gray-100 flex justify-between items-center">
+                        <div><div class="font-bold text-sm text-deepBlue">${item.name}</div><div class="text-[10px] text-gray-500 uppercase">${item.category}</div></div>
+                        <div class="text-right"><div class="font-bold text-sm">KSh ${item.price}</div><div class="text-xs ${item.stock < 10 ? 'text-red-500 font-bold' : 'text-gray-500'}">Stock: ${item.stock}</div></div>
+                        <button onclick="editProduct(${item.id})" class="ml-3 text-gray-400 hover:text-deepBlue"><i class="fas fa-edit"></i></button>
+                    </div>
+                `;
+            });
+        }
+        function updateDashboard() {
+            const totalRevenue = transactions.reduce((acc, tx) => acc + tx.total, 0);
+            const totalSales = transactions.length;
+            const lowStockItems = inventory.filter(i => i.stock < 10).length;
+            document.getElementById('dash-sales').innerText = totalSales;
+            document.getElementById('dash-revenue').innerText = "KSh " + (totalRevenue > 1000 ? (totalRevenue/1000).toFixed(1) + 'k' : totalRevenue);
+            document.getElementById('dash-low').innerText = lowStockItems;
+        }
+
+        // --- MODALS (Product) ---
+        function openProductModal() { document.getElementById('product-modal').classList.remove('hidden'); document.getElementById('modal-title').innerText = "Add New Item"; document.getElementById('edit-id').value = ""; document.getElementById('edit-name').value = ""; document.getElementById('edit-price').value = ""; document.getElementById('edit-stock').value = ""; }
+        function closeProductModal() { document.getElementById('product-modal').classList.add('hidden'); }
+        function editProduct(id) { const item = inventory.find(i => i.id === id); document.getElementById('product-modal').classList.remove('hidden'); document.getElementById('modal-title').innerText = "Edit Item"; document.getElementById('edit-id').value = item.id; document.getElementById('edit-name').value = item.name; document.getElementById('edit-price').value = item.price; document.getElementById('edit-stock').value = item.stock; document.getElementById('edit-category').value = item.category; }
+        function saveProduct() {
+            const id = document.getElementById('edit-id').value; const name = document.getElementById('edit-name').value;
+            const price = parseFloat(document.getElementById('edit-price').value); const stock = parseInt(document.getElementById('edit-stock').value); const cat = document.getElementById('edit-category').value;
+            if(!name || !price || isNaN(stock)) return alert("Please fill all fields");
+            if(id) { const item = inventory.find(i => i.id == id); item.name = name; item.price = price; item.stock = stock; item.category = cat; } 
+            else { inventory.push({ id: Date.now(), name: name, price: price, stock: stock, category: cat, icon: 'fa-cube' }); }
+            saveInventory(); updateUI(); closeProductModal();
+        }
+        function clearData() { if(confirm("Factory Reset: Clear ALL data?")) { localStorage.clear(); location.reload(); } }
+    </script>
+</body>
+</html>
